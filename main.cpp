@@ -96,7 +96,7 @@ public:
     }
 
     virtual bool isValidFlow(Direction from, Direction to) {
-        return flow[from].count(to) > 0;
+        return flow[from].size() > 0;
     }
 
     const map<Direction, set<Direction>> &getFlow() const {
@@ -228,29 +228,61 @@ public:
     }
 
     bool canWaterFlow(const Position &start, const Position &end) {
-        queue<Position> q;
+        queue<Position> toVisit;
         set<Position> visited;
-        q.push(start);
+
+        toVisit.push(start);
         visited.insert(start);
 
-        while (!q.empty()) {
-            Position cur = q.front();
-            q.pop();
+        while (!toVisit.empty()) {
+            Position current = toVisit.front();
+            toVisit.pop();
 
-            if (cur == end) {
+            // Check if we've reached the end
+            if (current == end) {
                 return true;
             }
 
-            for (auto &[dir, neighbors] : grid[cur]->getFlow()) {
-                Position next = cur.move(dir);
-                if (isWithinBounds(next) && !visited.count(next) &&
-                    grid[next] && grid[next]->isValidFlow(static_cast<Direction>((dir + 2) % 4), dir)) {
-                    q.push(next);
-                    visited.insert(next);
+            Tile *currentTile = getTileAt(current);
+            if (!currentTile) {
+                continue;  // Skip empty cells
+            }
+
+            // Iterate through all flow directions of the current tile
+            for (auto &[fromDir, toDirs] : currentTile->getFlow()) {
+                for (Direction toDir : toDirs) {
+                    Position neighbor = current.move(toDir);
+                    // Ensure the neighbor is within bounds and not already visited
+                    if (!isWithinBounds(neighbor) || visited.count(neighbor)) {
+                        continue;
+                    }
+
+
+                    // Check if the neighbor tile exists and accepts the flow from the current tile
+                    Tile *neighborTile = getTileAt(neighbor);
+//                    for (auto p: neighborTile->getFlow()){
+//                        cout << p.first << ":";
+//                        for (auto d: p.second){
+//                            cout << d << " ";
+//                        }
+//                        cout << endl;
+//                    }
+
+//                    cout << static_cast<Direction>((toDir + 2) % 4) << endl;
+                    if (neighborTile && neighborTile->isValidFlow(static_cast<Direction>((toDir + 2) % 4), toDir)) {
+                        toVisit.push(neighbor);
+                        visited.insert(neighbor);
+                    }
                 }
             }
         }
-        return false;
+
+        return false;  // No valid path to the load
+    }
+
+    Tile* getTileAt(const Position &pos) const {
+        auto it = grid.find(pos);
+        return it != grid.end() ? it->second : nullptr;
     }
 
     void display() {
@@ -326,7 +358,6 @@ bool solve(Board &board, const Position &loadPos, const Position &sourcePos, vec
                         Tile *tile = tiles[i];
 
                         for (int rot = 0; rot < 4; ++rot) {
-                            board.display();
                             board.placeTile(pos, tile);
                             --tileCounts[i];
 
@@ -359,6 +390,10 @@ int main() {
     Load greenLoad(G, {{W, {W}}});
     Position loadPos = {1, 2};
     board.placeTile({1, 2}, &greenLoad);
+
+//    board.placeTile({0, 1}, new Pipe({{W, {S}}, {S, {W}}}));
+//    board.placeTile({1, 1}, new Pipe({{N, {E}}, {E, {N}}}));
+//    cout << board.canWaterFlow({0, 0}, {1, 2}) << endl;
 
     vector<Tile *> tiles = {
             new Pipe({{W, {N}}, {N, {W}}}),
