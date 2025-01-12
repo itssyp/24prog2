@@ -75,9 +75,11 @@ public:
     void rotateRight(){
         map<Direction, set<Direction>> newFlow;
         for (auto fldir: flow){
-            newFlow[++fldir.first];
+            Direction newFrom = ++fldir.first;
+            newFlow[newFrom];
             for (auto &dir:fldir.second){
-                ++dir;
+                Direction newTo = ++dir;
+                newFlow[newFrom].insert(newTo);
             }
         }
         flow = newFlow;
@@ -102,6 +104,22 @@ public:
     const map<Direction, set<Direction>> &getFlow() const {
         return flow;
     }
+
+    void display() const {
+        // Display this tile's flow in a simplified way
+        cout << "[";
+        for (auto &[from, toSet] : flow) {
+            cout << "(";
+            cout << (from == N ? "N" : from == E ? "E" : from == S ? "S" : "W");
+            cout << "->";
+            for (Direction to : toSet) {
+                cout << (to == N ? "N" : to == E ? "E" : to == S ? "S" : "W") << " ";
+            }
+            cout << ")";
+        }
+        cout << "] ";
+    }
+
 };
 
 class Pipe: public Tile{
@@ -285,28 +303,22 @@ public:
         return it != grid.end() ? it->second : nullptr;
     }
 
-    void display() {
-        cout << "Board:\n";
-        for (int r = 0; r < rows; ++r) {
-            for (int c = 0; c < cols; ++c) {
-                Position pos = {r, c};
-                if (grid.find(pos) != grid.end()) {
-                    cout << setw(4) << grid[pos]->getDisplayChar();
-                } else {
-                    cout << setw(4) << ".";
-                }
-            }
-            cout << "\n";
-        }
+    int getRows(){
+        return rows;
+    }
 
-        cout << "\nFlow Directions:\n";
-        for (int r = 0; r < rows; ++r) {
-            for (int c = 0; c < cols; ++c) {
-                Position pos = {r, c};
-                if (grid.find(pos) != grid.end()) {
-                    cout << setw(4) << grid[pos]->getDisplayFlow();
+    int getCols(){
+        return cols;
+    }
+
+    void display() const {
+        for (int row = 0; row < rows; ++row) {
+            for (int col = 0; col < cols; ++col) {
+                const Tile *tile = getTileAt({row, col});
+                if (tile) {
+                    tile->display();
                 } else {
-                    cout << setw(4) << ".";
+                    cout << " . ";  // Empty cell
                 }
             }
             cout << "\n";
@@ -377,6 +389,51 @@ bool solve(Board &board, const Position &loadPos, const Position &sourcePos, vec
     return false;
 }
 
+bool solve2(Board &board, const vector<Tile *> &tiles, set<int> &usedTiles, Position source, Position load) {
+    if (board.canWaterFlow(source, load)) {
+        cout << "\nSolved Board:\n";
+        board.display();
+        return true;
+    }
+
+    // Iterate through every position on the board
+    for (int row = 0; row < board.getRows(); ++row) {
+        for (int col = 0; col < board.getCols(); ++col) {
+            Position pos = {row, col};
+
+            if (board.getTileAt(pos) != nullptr) continue;  // Skip if there's already a tile at this position
+
+            // Try placing every unused tile at this position
+            for (int i = 0; i < tiles.size(); ++i) {
+                if (usedTiles.count(i)) continue;  // Skip already used tiles
+
+                Tile *tile = tiles[i];
+
+                // Try all 4 rotations for the tile
+                for (int rotation = 0; rotation < 4; ++rotation) {
+                    board.placeTile(pos, tile);    // Place the tile
+                    usedTiles.insert(i);          // Mark this tile as used
+
+                    cout << "\nBoard State After Placement:\n";
+                    board.display();              // Display the board state
+
+                    // Recursively solve the board
+                    if (solve2(board, tiles, usedTiles, source, load)) {
+                        return true;
+                    }
+
+                    // Undo placement
+                    board.removeTile(pos);
+                    usedTiles.erase(i);
+                    tile->rotateRight();          // Rotate the tile for the next try
+                }
+            }
+        }
+    }
+
+    return false;  // If no valid placements work
+}
+
 int main() {
     int rows = 2, cols = 3;
     Board board(rows, cols);
@@ -399,9 +456,18 @@ int main() {
             new Pipe({{W, {N}}, {N, {W}}}),
             new Pipe({{W, {N}}, {N, {W}}})
     };
+    tiles[0]->display();
+    tiles[0]->rotateRight();
+    tiles[0]->display();
     vector<int> tileCounts = {1, 1};
 
-    if (solve(board, loadPos, sourcePos, tiles, tileCounts, rows, cols)) {
+//    if (solve(board, loadPos, sourcePos, tiles, tileCounts, rows, cols)) {
+//        cout << "Solution found!\n";
+//    } else {
+//        cout << "No solution exists.\n";
+//    }
+    set<int> usedTiles;
+    if (solve2(board, tiles, usedTiles, sourcePos, loadPos)) {
         cout << "Solution found!\n";
     } else {
         cout << "No solution exists.\n";
