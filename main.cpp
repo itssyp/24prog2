@@ -298,6 +298,25 @@ public:
         return false;  // No valid path to the load
     }
 
+    bool isComplete(const vector<pair<Position, Color>> &sources,
+                           const vector<pair<Position, Color>> &loads) {
+
+        // Ensure all loads are reached by the correct color
+        for (const auto &[loadPos, loadColor] : loads) {
+            bool isLoadSatisfied = false;
+            for (const auto &[sourcePos, sourceColor] : sources){
+                if (sourceColor == loadColor){
+                    if (canWaterFlow(sourcePos, loadPos)){
+                        isLoadSatisfied = true;
+                        break;
+                    }
+                }
+            }
+            if (!isLoadSatisfied) return false;
+        }
+        return true;
+    }
+
     Tile* getTileAt(const Position &pos) const {
         auto it = grid.find(pos);
         return it != grid.end() ? it->second : nullptr;
@@ -355,41 +374,41 @@ void readTiles(ifstream &f, vector<Tile*> &tiles){
     }
 }
 
-bool solve(Board &board, const Position &loadPos, const Position &sourcePos, vector<Tile *> &tiles, vector<int> &tileCounts, int rows, int cols) {
-    if (board.canWaterFlow(sourcePos, loadPos)) {
-        return true;
-    }
+//bool solve(Board &board, const Position &loadPos, const Position &sourcePos, vector<Tile *> &tiles, vector<int> &tileCounts, int rows, int cols) {
+//    if (board.canWaterFlow(sourcePos, loadPos)) {
+//        return true;
+//    }
+//
+//    for (int r = 0; r < rows; ++r) {
+//        for (int c = 0; c < cols; ++c) {
+//            Position pos = {r, c};
+//
+//            if (board.isCellEmpty(pos)) {
+//                for (size_t i = 0; i < tiles.size(); ++i) {
+//                    if (tileCounts[i] > 0) {
+//                        Tile *tile = tiles[i];
+//
+//                        for (int rot = 0; rot < 4; ++rot) {
+//                            board.placeTile(pos, tile);
+//                            --tileCounts[i];
+//
+//                            if (solve(board, loadPos, sourcePos, tiles, tileCounts, rows, cols)) {
+//                                return true;
+//                            }
+//
+//                            ++tileCounts[i];
+//                            board.removeTile(pos);
+//                            tile->rotateRight();
+//                        }
+//                    }
+//                }
+//            }
+//        }
+//    }
+//    return false;
+//}
 
-    for (int r = 0; r < rows; ++r) {
-        for (int c = 0; c < cols; ++c) {
-            Position pos = {r, c};
-
-            if (board.isCellEmpty(pos)) {
-                for (size_t i = 0; i < tiles.size(); ++i) {
-                    if (tileCounts[i] > 0) {
-                        Tile *tile = tiles[i];
-
-                        for (int rot = 0; rot < 4; ++rot) {
-                            board.placeTile(pos, tile);
-                            --tileCounts[i];
-
-                            if (solve(board, loadPos, sourcePos, tiles, tileCounts, rows, cols)) {
-                                return true;
-                            }
-
-                            ++tileCounts[i];
-                            board.removeTile(pos);
-                            tile->rotateRight();
-                        }
-                    }
-                }
-            }
-        }
-    }
-    return false;
-}
-
-bool solve2(Board &board, const vector<Tile *> &tiles, set<int> &usedTiles, Position source, Position load) {
+bool solve_single(Board &board, const vector<Tile *> &tiles, set<int> &usedTiles, Position source, Position load) {
     if (board.canWaterFlow(source, load)) {
         cout << "\nSolved Board:\n";
         board.display();
@@ -418,7 +437,7 @@ bool solve2(Board &board, const vector<Tile *> &tiles, set<int> &usedTiles, Posi
                     board.display();              // Display the board state
 
                     // Recursively solve the board
-                    if (solve2(board, tiles, usedTiles, source, load)) {
+                    if (solve_single(board, tiles, usedTiles, source, load)) {
                         return true;
                     }
 
@@ -426,6 +445,54 @@ bool solve2(Board &board, const vector<Tile *> &tiles, set<int> &usedTiles, Posi
                     board.removeTile(pos);
                     usedTiles.erase(i);
                     tile->rotateRight();          // Rotate the tile for the next try
+                }
+            }
+        }
+    }
+
+    return false;  // If no valid placements work
+}
+
+bool solve_multi(Board &board, const vector<Tile *> &tiles, set<int> &usedTiles,
+           const vector<pair<Position, Color>> &sources,
+           const vector<pair<Position, Color>> &loads) {
+    // Check if all loads are connected to the correct source
+    if (board.isComplete(sources, loads)) {
+        cout << "\nSolved Board:\n";
+        board.display();
+        return true;
+    }
+
+    // Iterate through every position on the board
+    for (int row = 0; row < board.getRows(); ++row) {
+        for (int col = 0; col < board.getCols(); ++col) {
+            Position pos = {row, col};
+
+            if (board.getTileAt(pos) != nullptr) continue;  // Skip if there's already a tile at this position
+
+            // Try placing every unused tile at this position
+            for (int i = 0; i < tiles.size(); ++i) {
+                if (usedTiles.count(i)) continue;  // Skip already used tiles
+
+                Tile *tile = tiles[i];
+
+                // Try all 4 rotations for the tile
+                for (int rotation = 0; rotation < 4; ++rotation) {
+                    board.placeTile(pos, tile);  // Place the tile
+                    usedTiles.insert(i);        // Mark this tile as used
+
+                    cout << "\nBoard State After Placement:\n";
+                    board.display();            // Display the board state
+
+                    // Recursively solve the board
+                    if (solve_multi(board, tiles, usedTiles, sources, loads)) {
+                        return true;
+                    }
+
+                    // Undo placement
+                    board.removeTile(pos);
+                    usedTiles.erase(i);
+                    tile->rotateRight();  // Rotate the tile for the next try
                 }
             }
         }
@@ -467,7 +534,17 @@ int main() {
 //        cout << "No solution exists.\n";
 //    }
     set<int> usedTiles;
-    if (solve2(board, tiles, usedTiles, sourcePos, loadPos)) {
+//    if (solve_single(board, tiles, usedTiles, sourcePos, loadPos)) {
+//        cout << "Solution found!\n";
+//    } else {
+//        cout << "No solution exists.\n";
+//    }
+
+    vector<pair<Position, Color>> sources;
+    sources.emplace_back(sourcePos,greenSource.getColor());
+    vector<pair<Position, Color>> loads;
+    sources.emplace_back(loadPos,greenLoad.getColor());
+    if (solve_multi(board, tiles, usedTiles, sources, loads)) {
         cout << "Solution found!\n";
     } else {
         cout << "No solution exists.\n";
